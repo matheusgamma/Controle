@@ -1,6 +1,7 @@
 import pandas as pd
 import streamlit as st
 import os
+import openpyxl
 
 # Configuração da interface do Streamlit
 st.title("Comparador de Planilhas")
