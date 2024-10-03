@@ -1,7 +1,6 @@
 import pandas as pd
 import streamlit as st
-import os
-import openpyxl
+import openpyxl  # Isso é opcional se você tiver no requirements.txt
 
 # Configuração da interface do Streamlit
 st.title("Comparador de Planilhas")
@@ -23,20 +22,7 @@ if st.button("Comparar"):
         elif arquivo_inclusoes is None:
             st.error("Por favor, carregue o arquivo Inclusões.")
         else:
-            # Ler os arquivos Excel
-            base_gamma = pd.read_excel(arquivo_base_gamma, sheet_name="Clientes.Responsáveis")
-            positivador_novo = pd.read_excel(arquivo_positivador_novo)
-            inclusoes_novo = pd.read_excel(arquivo_inclusoes)
-
-        # Verificar se os arquivos existem
-        if not os.path.isfile(arquivo_base_gamma):
-            st.error(f"O arquivo Base Gamma não foi encontrado: {arquivo_base_gamma}")
-        elif not os.path.isfile(arquivo_positivador_novo):
-            st.error(f"O arquivo Positivador Novo não foi encontrado: {arquivo_positivador_novo}")
-        elif not os.path.isfile(arquivo_inclusoes):
-            st.error(f"O arquivo Inclusões não foi encontrado: {arquivo_inclusoes}")
-        else:
-            # Ler os arquivos Excel, especificando a aba correta da Base Gamma
+            # Ler os arquivos Excel diretamente do UploadedFile
             base_gamma = pd.read_excel(arquivo_base_gamma, sheet_name="Clientes.Responsáveis")
             positivador_novo = pd.read_excel(arquivo_positivador_novo)
             inclusoes_novo = pd.read_excel(arquivo_inclusoes)
@@ -115,3 +101,4 @@ if st.button("Comparar"):
 
     except Exception as e:
         st.error(f"Ocorreu um erro: {e}")
+
