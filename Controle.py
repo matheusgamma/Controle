@@ -29,17 +29,17 @@ if st.button("Comparar"):
             inclusoes_novo = pd.read_excel(arquivo_inclusoes)
 
         # Verificar se os arquivos existem
-        if not os.path.isfile(caminho_base_gamma):
-            st.error(f"O arquivo Base Gamma não foi encontrado: {caminho_base_gamma}")
-        elif not os.path.isfile(caminho_positivador_novo):
-            st.error(f"O arquivo Positivador Novo não foi encontrado: {caminho_positivador_novo}")
-        elif not os.path.isfile(caminho_inclusoes):
-            st.error(f"O arquivo Inclusões não foi encontrado: {caminho_inclusoes}")
+        if not os.path.isfile(arquivo_base_gamma):
+            st.error(f"O arquivo Base Gamma não foi encontrado: {arquivo_base_gamma}")
+        elif not os.path.isfile(arquivo_positivador_novo):
+            st.error(f"O arquivo Positivador Novo não foi encontrado: {arquivo_positivador_novo}")
+        elif not os.path.isfile(arquivo_inclusoes):
+            st.error(f"O arquivo Inclusões não foi encontrado: {arquivo_inclusoes}")
         else:
             # Ler os arquivos Excel, especificando a aba correta da Base Gamma
-            base_gamma = pd.read_excel(caminho_base_gamma, sheet_name="Clientes.Responsáveis")
-            positivador_novo = pd.read_excel(caminho_positivador_novo)
-            inclusoes_novo = pd.read_excel(caminho_inclusoes)
+            base_gamma = pd.read_excel(arquivo_base_gamma, sheet_name="Clientes.Responsáveis")
+            positivador_novo = pd.read_excel(arquivo_positivador_novo)
+            inclusoes_novo = pd.read_excel(arquivo_inclusoes)
 
             # Função para ajustar o código do cliente
             def ajustar_codigo_cliente(codigo):
