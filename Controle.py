@@ -5,19 +5,27 @@ import os
 # Configuração da interface do Streamlit
 st.title("Comparador de Planilhas")
 
-# Input para o caminho do arquivo Base Gamma
-caminho_base_gamma = st.text_input("Caminho do arquivo Base Gamma:")
-# Input para o caminho do arquivo Positivador Novo
-caminho_positivador_novo = st.text_input("Caminho do arquivo Positivador Novo:")
-# Input para o caminho do arquivo Inclusões
-caminho_inclusoes = st.text_input("Caminho do arquivo Inclusões:")
+# Input para o arquivo Base Gamma
+arquivo_base_gamma = st.file_uploader("Carregue o arquivo Base Gamma:", type=["xlsx"])
+# Input para o arquivo Positivador Novo
+arquivo_positivador_novo = st.file_uploader("Carregue o arquivo Positivador Novo:", type=["xlsx"])
+# Input para o arquivo Inclusões
+arquivo_inclusoes = st.file_uploader("Carregue o arquivo Inclusões:", type=["xlsx"])
 
 if st.button("Comparar"):
     try:
-        # Remover espaços em branco e verificar se o caminho é válido
-        caminho_base_gamma = caminho_base_gamma.strip().strip('"')
-        caminho_positivador_novo = caminho_positivador_novo.strip().strip('"')
-        caminho_inclusoes = caminho_inclusoes.strip().strip('"')
+        # Verificar se os arquivos foram carregados
+        if arquivo_base_gamma is None:
+            st.error("Por favor, carregue o arquivo Base Gamma.")
+        elif arquivo_positivador_novo is None:
+            st.error("Por favor, carregue o arquivo Positivador Novo.")
+        elif arquivo_inclusoes is None:
+            st.error("Por favor, carregue o arquivo Inclusões.")
+        else:
+            # Ler os arquivos Excel
+            base_gamma = pd.read_excel(arquivo_base_gamma, sheet_name="Clientes.Responsáveis")
+            positivador_novo = pd.read_excel(arquivo_positivador_novo)
+            inclusoes_novo = pd.read_excel(arquivo_inclusoes)
 
         # Verificar se os arquivos existem
         if not os.path.isfile(caminho_base_gamma):
