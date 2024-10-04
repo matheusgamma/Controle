@@ -3,7 +3,7 @@ import streamlit as st
 import openpyxl
 
 # Configuração da interface do Streamlit
-st.title("Comparador de Planilhas")
+st.title("Relatório de movimentações Gamma Capital")
 
 # Input para o arquivo Base Gamma
 arquivo_base_gamma = st.file_uploader("Carregue o arquivo Base Gamma:", type=["xlsx"])
