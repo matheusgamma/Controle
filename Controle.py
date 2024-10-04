@@ -3,7 +3,7 @@ import streamlit as st
 import openpyxl
 
 # Configuração da interface do Streamlit
-st.title("Relatório de movimentações Gamma Capital")
+st.title("Relatório de movimentações - Gamma Capital")
 
 # Input para o arquivo Base Gamma
 arquivo_base_gamma = st.file_uploader("Carregue o arquivo Base Gamma:", type=["xlsx"])
@@ -27,6 +27,7 @@ if st.button("Comparar"):
             positivador_novo = pd.read_excel(arquivo_positivador_novo)
             inclusoes_novo = pd.read_excel(arquivo_inclusoes)
 
+
             # Função para ajustar o código do cliente
             def ajustar_codigo_cliente(codigo):
                 if pd.isna(codigo):  # Verifica se é NaN
@@ -35,19 +36,26 @@ if st.button("Comparar"):
                     return str(int(codigo))  # Remove o ".0" ao converter float para int e depois para string
                 return str(codigo).strip()  # Garante que qualquer outro código seja tratado como string
 
+
             # Ajustar as colunas de clientes para remoção do ".0" e garantir que sejam strings
             base_gamma['Cliente'] = base_gamma['Cliente'].astype(str).str.strip().str.lower()
             positivador_novo['Cliente'] = positivador_novo['Cliente'].astype(str).str.strip().str.lower()
-            inclusoes_novo['CODIGO DO CLIENTE'] = inclusoes_novo['CODIGO DO CLIENTE'].apply(ajustar_codigo_cliente).str.lower()
+            inclusoes_novo['CODIGO DO CLIENTE'] = inclusoes_novo['CODIGO DO CLIENTE'].apply(
+                ajustar_codigo_cliente).str.lower()
 
             # Remover entradas None (códigos que eram NaN)
             inclusoes_novo = inclusoes_novo[inclusoes_novo['CODIGO DO CLIENTE'].notna()]
 
             # Verificar o número de colunas e ajustar a renomeação da Base Gamma
             if len(base_gamma.columns) == 8:
-                base_gamma.columns = ['Positivador', 'Dt Entrada', 'Dt Saída', 'Cliente', 'Classe', 'Nome', 'Farmer / Hunter', 'Trader']
+                base_gamma.columns = ['Positivador', 'Dt Entrada', 'Dt Saída', 'Cliente', 'Classe', 'Nome',
+                                      'Farmer / Hunter', 'Trader']
             else:
-                st.warning(f"Base Gamma possui {len(base_gamma.columns)} colunas. Verifique a estrutura dos dados: {base_gamma.columns.tolist()}")
+                st.warning(
+                    f"Base Gamma possui {len(base_gamma.columns)} colunas. Verifique a estrutura dos dados: {base_gamma.columns.tolist()}")
+
+            # Remover duplicatas na Base Gamma
+            base_gamma = base_gamma.drop_duplicates(subset='Cliente')
 
             # Interseção de clientes
             clientes_base_gamma = set(base_gamma['Cliente'])
@@ -84,44 +92,90 @@ if st.button("Comparar"):
                 'Fim': [fim_total, dentro_positivador_fim, fora_positivador_fim]
             })
 
-            # Exibir o Relatório de Movimentações no topo
-            st.subheader("Relatório de Movimentações")
-            st.dataframe(relatorio)
-
-            # Criar um resumo com os totais
-            total_coincidentes = len(coincidentes)
-            total_novos = len(novos)
-            total_saidas = len(saidas)
-            total_inclusoes = len(clientes_inclusoes)
-            total_basegamma = len(clientes_base_gamma)
+            # Calcular informações extras (Entradas, Coincidente Inclusões, Sem Farmer)
             total_coincidentes_inclusoes_novos = len(coincidentes_inclusoes_novos)
+            sem_farmer = entradas_total - total_coincidentes_inclusoes_novos
 
-            # Exibir o resumo dos totais
-            st.subheader("Resumo dos Totais")
-            st.write(f"Total de clientes coincidentes: {total_coincidentes}")
-            st.write(f"Total de novos clientes: {total_novos}")
-            st.write(f"Total de clientes que saíram: {total_saidas}")
-            st.write(f"Total de inclusões: {total_inclusoes}")
-            st.write(f"Total Base Gamma: {total_basegamma}")
-            st.write(f"Total de clientes coincidentes entre Inclusões e Novos Clientes: {total_coincidentes_inclusoes_novos}")
+            # Criar DataFrame para as novas informações no topo
+            informacoes_extras = pd.DataFrame({
+                '': ['Entradas', 'Coincidente Inclusões', 'Sem Farmer'],
+                'Total': [entradas_total, total_coincidentes_inclusoes_novos, sem_farmer]
+            })
 
-            # Exibir os DataFrames completos (opcional)
-            st.subheader("Coincidentes entre Inclusões e Novos Clientes:")
-            st.dataframe(inclusoes_novo[inclusoes_novo['CODIGO DO CLIENTE'].isin(coincidentes_inclusoes_novos)])
+            # --- Painel 1: Resumo e Movimentações ---
+            with st.expander("Painel 1: Resumo e Movimentações", expanded=True):
+                st.subheader("Resumo dos Totais")
+                st.write(f"Total de clientes coincidentes: {len(coincidentes)}")
+                st.write(f"Total de novos clientes: {entradas_total}")
+                st.write(f"Total de clientes que saíram: {len(saidas)}")
+                st.write(f"Total de inclusões: {len(clientes_inclusoes)}")
+                st.write(f"Total Base Gamma: {inicio_total}")
+                st.write(
+                    f"Total de clientes coincidentes entre Inclusões e Novos Clientes: {total_coincidentes_inclusoes_novos}")
 
-            st.subheader("Detalhes - Coincidentes:")
-            st.dataframe(base_gamma[base_gamma['Cliente'].isin(coincidentes)])
+                st.subheader("Relatório de Movimentações")
+                st.dataframe(relatorio)
 
-            st.subheader("Detalhes - Novos Clientes:")
-            st.dataframe(positivador_novo[positivador_novo['Cliente'].isin(novos)])
+                st.subheader("Informações Adicionais")
+                st.dataframe(informacoes_extras)
 
-            st.subheader("Detalhes - Clientes que Saíram:")
-            st.dataframe(base_gamma[base_gamma['Cliente'].isin(saidas)])
+            # --- Painel 2: Coincidências ---
+            with st.expander("Painel 2: Coincidências", expanded=False):
+                st.subheader("Coincidentes entre Inclusões e Novos Clientes:")
+                st.dataframe(inclusoes_novo[inclusoes_novo['CODIGO DO CLIENTE'].isin(coincidentes_inclusoes_novos)])
 
-            st.subheader("Detalhes - Inclusões:")
-            st.dataframe(inclusoes_novo[inclusoes_novo['CODIGO DO CLIENTE'].isin(clientes_inclusoes)])
+                st.subheader("Detalhes - Coincidentes:")
+                st.dataframe(base_gamma[base_gamma['Cliente'].isin(coincidentes)])
+
+            # --- Painel 3: Outros Detalhes ---
+            with st.expander("Painel 3: Outros Detalhes", expanded=False):
+                st.subheader("Detalhes - Clientes que Saíram:")
+                st.dataframe(base_gamma[base_gamma['Cliente'].isin(saidas)])
+
+                st.subheader("Detalhes - Novos Clientes:")
+                st.dataframe(positivador_novo[positivador_novo['Cliente'].isin(novos)])
+
+                st.subheader("Detalhes - Inclusões:")
+                st.dataframe(inclusoes_novo[inclusoes_novo['CODIGO DO CLIENTE'].isin(clientes_inclusoes)])
+
+                st.subheader("Detalhe - Base Gamma (Completo):")
+                st.dataframe(base_gamma)
+
+            # Agrupar clientes por Classe e Farmer/Hunter
+            clientes_por_pessoa = base_gamma.groupby(['Classe', 'Farmer / Hunter']).size().reset_index(
+                name='Total de Clientes')
+
+            # Somar todos os clientes por Classe
+            total_geral = clientes_por_pessoa['Total de Clientes'].sum()
+
+            # Adicionar uma linha de total geral
+            total_row = pd.DataFrame([['Total', '', total_geral]],
+                                     columns=['Classe', 'Farmer / Hunter', 'Total de Clientes'])
+
+            clientes_por_pessoa = pd.concat([clientes_por_pessoa, total_row], ignore_index=True)
+
+            # --- Painel 4: Tabela dinâmica (Clientes por Classe e Pessoa) ---
+            st.subheader("Painel 4: Clientes por Classe e Pessoa")
+
+            # Loop para criar expanders para cada classe
+            classes = clientes_por_pessoa['Classe'].unique()
+
+            for classe in classes:
+                with st.expander(f"{classe}", expanded=False):
+                    # Filtrar clientes por classe específica
+                    clientes_classe = clientes_por_pessoa[clientes_por_pessoa['Classe'] == classe]
+
+                    # Calcular subtotal da classe
+                    subtotal = clientes_classe['Total de Clientes'].sum()
+
+                    # Exibir os dados da classe expandida
+                    st.dataframe(clientes_classe)
+
+                    # Exibir o subtotal da classe
+                    st.write(f"Subtotal para {classe}: {subtotal} clientes")
+
 
             st.success("Comparação e relatório de movimentações gerados com sucesso!")
 
     except Exception as e:
-        st.error(f"Ocorreu um erro: {e}")
+        st.error(f"Ocorreu um erro durante a comparação: {e}")
