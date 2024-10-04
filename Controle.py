@@ -1,6 +1,6 @@
 import pandas as pd
 import streamlit as st
-import openpyxl  # Isso é opcional se você tiver no requirements.txt
+import openpyxl
 
 # Configuração da interface do Streamlit
 st.title("Comparador de Planilhas")
@@ -43,10 +43,6 @@ if st.button("Comparar"):
             # Remover entradas None (códigos que eram NaN)
             inclusoes_novo = inclusoes_novo[inclusoes_novo['CODIGO DO CLIENTE'].notna()]
 
-            # Tratar colunas com datetime para evitar erros na conversão
-            if 'DATA DO PROCESSO' in base_gamma.columns:
-                base_gamma['DATA DO PROCESSO'] = pd.to_datetime(base_gamma['DATA DO PROCESSO'], errors='coerce')
-
             # Verificar o número de colunas e ajustar a renomeação da Base Gamma
             if len(base_gamma.columns) == 8:
                 base_gamma.columns = ['Positivador', 'Dt Entrada', 'Dt Saída', 'Cliente', 'Classe', 'Nome', 'Farmer / Hunter', 'Trader']
@@ -63,6 +59,34 @@ if st.button("Comparar"):
             novos = clientes_positivador_novo - clientes_base_gamma
             saidas = clientes_base_gamma - clientes_positivador_novo
             coincidentes_inclusoes_novos = clientes_inclusoes.intersection(novos)
+
+            # Cálculo do relatório de movimentações
+            inicio_total = len(clientes_base_gamma)
+            entradas_total = len(novos)
+            saidas_total = len(saidas)
+            fim_total = inicio_total + entradas_total - saidas_total
+
+            dentro_positivador_inicio = len(coincidentes)
+            dentro_positivador_saidas = len(saidas.intersection(coincidentes))
+            dentro_positivador_fim = dentro_positivador_inicio - dentro_positivador_saidas
+
+            fora_positivador_inicio = inicio_total - dentro_positivador_inicio
+            fora_positivador_saidas = len(saidas.difference(coincidentes))
+            fora_positivador_entradas = len(novos)
+            fora_positivador_fim = fora_positivador_inicio + fora_positivador_entradas - fora_positivador_saidas
+
+            # Criar DataFrame para o Relatório de Movimentações
+            relatorio = pd.DataFrame({
+                '': ['Total', 'Dentro Positivador', 'Fora Positivador'],
+                'Início': [inicio_total, dentro_positivador_inicio, fora_positivador_inicio],
+                'Entradas': [entradas_total, 0, fora_positivador_entradas],
+                'Saídas': [saidas_total, dentro_positivador_saidas, fora_positivador_saidas],
+                'Fim': [fim_total, dentro_positivador_fim, fora_positivador_fim]
+            })
+
+            # Exibir o Relatório de Movimentações no topo
+            st.subheader("Relatório de Movimentações")
+            st.dataframe(relatorio)
 
             # Criar um resumo com os totais
             total_coincidentes = len(coincidentes)
@@ -97,8 +121,7 @@ if st.button("Comparar"):
             st.subheader("Detalhes - Inclusões:")
             st.dataframe(inclusoes_novo[inclusoes_novo['CODIGO DO CLIENTE'].isin(clientes_inclusoes)])
 
-            st.success("Comparação e resumo dos totais concluídos com sucesso!")
+            st.success("Comparação e relatório de movimentações gerados com sucesso!")
 
     except Exception as e:
         st.error(f"Ocorreu um erro: {e}")
-
