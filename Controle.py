@@ -3,7 +3,7 @@ import streamlit as st
 import openpyxl
 
 # Configuração da interface do Streamlit
-st.title("Relatório de movimentações - Gamma Capital")
+st.title("Relatório de movimentos - Gamma Capital")
 
 # Input para o arquivo Base Gamma
 arquivo_base_gamma = st.file_uploader("Carregue o arquivo Base Gamma:", type=["xlsx"])
@@ -103,15 +103,24 @@ if st.button("Comparar"):
             })
 
             # --- Painel 1: Resumo e Movimentações ---
-            with st.expander("Painel 1: Resumo e Movimentações", expanded=True):
+            with st.expander("Painel 1: Base Gamma x Positivador", expanded=True):
                 st.subheader("Resumo dos Totais")
-                st.write(f"Total de clientes coincidentes: {len(coincidentes)}")
+                st.write(f"Total de clientes coincidentes (Positivador x Base Gamma): {len(coincidentes)}")
                 st.write(f"Total de novos clientes: {entradas_total}")
                 st.write(f"Total de clientes que saíram: {len(saidas)}")
                 st.write(f"Total de inclusões: {len(clientes_inclusoes)}")
                 st.write(f"Total Base Gamma: {inicio_total}")
                 st.write(
                     f"Total de clientes coincidentes entre Inclusões e Novos Clientes: {total_coincidentes_inclusoes_novos}")
+
+                st.subheader("Coincidentes Positivador e Base Gamma:")
+                st.dataframe(base_gamma[base_gamma['Cliente'].isin(coincidentes)])
+
+                st.subheader("Detalhes - Novos Clientes:")
+                st.dataframe(positivador_novo[positivador_novo['Cliente'].isin(novos)])
+
+                st.subheader("Detalhes - Clientes que Saíram:")
+                st.dataframe(base_gamma[base_gamma['Cliente'].isin(saidas)])
 
                 st.subheader("Relatório de Movimentações")
                 st.dataframe(relatorio)
@@ -121,25 +130,21 @@ if st.button("Comparar"):
 
             # --- Painel 2: Coincidências ---
             with st.expander("Painel 2: Coincidências", expanded=False):
+
                 st.subheader("Coincidentes entre Inclusões e Novos Clientes:")
                 st.dataframe(inclusoes_novo[inclusoes_novo['CODIGO DO CLIENTE'].isin(coincidentes_inclusoes_novos)])
 
-                st.subheader("Detalhes - Coincidentes:")
-                st.dataframe(base_gamma[base_gamma['Cliente'].isin(coincidentes)])
+                # Calcular diferença entre novos e coincidências
+                diferenca_novos_coincidentes = novos - coincidentes_inclusoes_novos
+                st.subheader("Clientes sem farmer:")
+                st.dataframe(positivador_novo[positivador_novo['Cliente'].isin(diferenca_novos_coincidentes)])
+
 
             # --- Painel 3: Outros Detalhes ---
             with st.expander("Painel 3: Outros Detalhes", expanded=False):
-                st.subheader("Detalhes - Clientes que Saíram:")
-                st.dataframe(base_gamma[base_gamma['Cliente'].isin(saidas)])
-
-                st.subheader("Detalhes - Novos Clientes:")
-                st.dataframe(positivador_novo[positivador_novo['Cliente'].isin(novos)])
 
                 st.subheader("Detalhes - Inclusões:")
                 st.dataframe(inclusoes_novo[inclusoes_novo['CODIGO DO CLIENTE'].isin(clientes_inclusoes)])
-
-                st.subheader("Detalhe - Base Gamma (Completo):")
-                st.dataframe(base_gamma)
 
             # Agrupar clientes por Classe e Farmer/Hunter
             clientes_por_pessoa = base_gamma.groupby(['Classe', 'Farmer / Hunter']).size().reset_index(
