@@ -23,7 +23,7 @@ if st.button("Comparar"):
             st.error("Por favor, carregue o arquivo Inclusões.")
         else:
             # Ler os arquivos Excel diretamente do UploadedFile
-            base_gamma = pd.read_excel(arquivo_base_gamma, sheet_name="Clientes.Responsáveis")
+            base_gamma = pd.read_excel(arquivo_base_gamma, sheet_name="Master")
             positivador_novo = pd.read_excel(arquivo_positivador_novo)
             inclusoes_novo = pd.read_excel(arquivo_inclusoes)
 
