@@ -1,198 +1,123 @@
 import pandas as pd
 import streamlit as st
-import openpyxl
+import plotly.express as px
+from datetime import datetime
+from io import BytesIO
 
-# Configuração da interface do Streamlit
-st.title("Relatório de movimentos - Gamma Capital")
+# Configuração do Streamlit
+st.set_page_config(page_title="Relatório de Transferências de Clientes", layout="wide", page_icon="📊")
 
-# Input para o arquivo Base Gamma
-arquivo_base_gamma = st.file_uploader("Carregue o arquivo Base Gamma:", type=["xlsx"])
-# Input para o arquivo Positivador Novo
-arquivo_positivador_novo = st.file_uploader("Carregue o arquivo Positivador Novo:", type=["xlsx"])
-# Input para o arquivo Inclusões
-arquivo_inclusoes = st.file_uploader("Carregue o arquivo Inclusões:", type=["xlsx"])
+# Título
+st.title("📊 Relatório Consolidado de Transferências de Clientes por Assessor")
+
+# Upload dos arquivos
+arquivo_master = st.file_uploader("Carregue a Master:", type=["xlsm"])
+arquivo_transferencia = st.file_uploader("Carregue o arquivo de Transferências de Contas:", type=["xlsx"])
+
+# Seleção do mês/ano
+mes_ano = st.text_input("Digite o mês/ano no formato MM/AAAA:", value="11/2024")
 
 with st.spinner('Comparando as bases de dados, aguarde...'):
-    # Coloque todo o código da comparação dentro desse bloco
-    # Para que o spinner fique ativo enquanto a comparação ocorre
+    if st.button("Gerar Relatório"):
+        if None in [arquivo_master, arquivo_transferencia]:
+            st.error("Por favor, carregue os dois arquivos.")
+        else:
+            # Carregar os arquivos
+            master = pd.read_excel(arquivo_master, sheet_name="Clientes.Responsáveis")
+            transferencia = pd.read_excel(arquivo_transferencia)
 
+            # Filtrar transferências concluídas
+            transferencia = transferencia[transferencia['Status'] == 'CONCLUIDO']
 
-    if st.button("Comparar"):
-        try:
-            # Verificar se os arquivos foram carregados
-            if arquivo_base_gamma is None:
-                st.error("Por favor, carregue o arquivo Base Gamma.")
-            elif arquivo_positivador_novo is None:
-                st.error("Por favor, carregue o arquivo Positivador Novo.")
-            elif arquivo_inclusoes is None:
-                st.error("Por favor, carregue o arquivo Inclusões.")
-            else:
-                # Ler os arquivos Excel diretamente do UploadedFile
+            master = master.rename(columns={'Cliente': 'Código do Cliente'})
 
-                base_gamma = pd.read_excel(arquivo_base_gamma, sheet_name="Clientes.Responsáveis")
-                positivador_novo = pd.read_excel(arquivo_positivador_novo)
-                inclusoes_novo = pd.read_excel(arquivo_inclusoes)
+            # Vincular clientes ao Assessor na Master
+            clientes_master = master[['Código do Cliente', 'Farmer']].drop_duplicates()
+            transferencia = transferencia.merge(clientes_master, on='Código do Cliente', how='left', suffixes=('', '_Master'))
 
+            # Preencher "Não Consta" para clientes que não foram encontrados na Master
+            transferencia['Farmer'] = transferencia['Farmer'].fillna("Não Consta")
 
-                # Função para ajustar o código do cliente
-                def ajustar_codigo_cliente(codigo):
-                    if pd.isna(codigo):  # Verifica se é NaN
-                        return None  # Retorna None se for NaN
-                    if isinstance(codigo, float):
-                        return str(int(codigo))  # Remove o ".0" ao converter float para int e depois para string
-                    return str(codigo).strip()  # Garante que qualquer outro código seja tratado como string
+            # Filtrar pelo mês/ano
+            transferencia['Data Transferência'] = pd.to_datetime(transferencia['Data Transferência'], format="%d/%m/%Y %H:%M:%S")
+            transferencia['Mês/Ano'] = transferencia['Data Transferência'].dt.strftime("%m/%Y")
+            transferencia_filtrada = transferencia[transferencia['Mês/Ano'] == mes_ano]
 
+            # Identificar entradas e saídas
+            entradas = transferencia_filtrada[
+                transferencia_filtrada['Nome Assessor Origem'].isna() &
+                transferencia_filtrada['Nome Assessor Destino'].notna()
+            ]
+            saidas = transferencia_filtrada[
+                transferencia_filtrada['Nome Assessor Origem'].notna() &
+                transferencia_filtrada['Nome Assessor Destino'].isna()
+            ]
 
-                # Ajustar as colunas de clientes para remoção do ".0" e garantir que sejam strings
-                base_gamma['Cliente'] = base_gamma['Cliente'].astype(str).str.strip().str.lower()
-                positivador_novo['Cliente'] = positivador_novo['Cliente'].astype(str).str.strip().str.lower()
-                inclusoes_novo['CODIGO DO CLIENTE'] = inclusoes_novo['CODIGO DO CLIENTE'].apply(
-                    ajustar_codigo_cliente).str.lower()
+            # Contar clientes por assessor
+            clientes_por_assessor = master.groupby('Farmer').size().reset_index(name="Clientes Iniciais")
+            entradas_por_assessor = entradas.groupby('Farmer')['Código do Cliente'].nunique().reset_index(name="Entradas")
+            saidas_por_assessor = saidas.groupby('Farmer')['Código do Cliente'].nunique().reset_index(name="Saídas")
 
-                # Remover entradas None (códigos que eram NaN)
-                inclusoes_novo = inclusoes_novo[inclusoes_novo['CODIGO DO CLIENTE'].notna()]
+            # Consolidar resumo por assessor
+            todos_assessores = list(master['Farmer'].unique()) + ["Não Consta"]
+            resumo_por_assessor = pd.DataFrame({'Farmer': todos_assessores}).merge(
+                clientes_por_assessor,
+                on="Farmer", how="left"
+            ).merge(
+                entradas_por_assessor,
+                on="Farmer", how="left"
+            ).merge(
+                saidas_por_assessor,
+                on="Farmer", how="left"
+            )
 
-                # Verificar o número de colunas e ajustar a renomeação da Base Gamma
-                if len(base_gamma.columns) == 8:
-                    base_gamma.columns = ['Positivador', 'Dt Entrada', 'Dt Saída', 'Cliente', 'Classe', 'Nome',
-                                          'Farmer / Hunter', 'Trader']
-                else:
-                    st.warning(
-                        f"Base Gamma possui {len(base_gamma.columns)} colunas. Verifique a estrutura dos dados: {base_gamma.columns.tolist()}")
+            # Ajustar valores para zero onde necessário
+            resumo_por_assessor = resumo_por_assessor.fillna(0)
+            resumo_por_assessor['Entradas'] = resumo_por_assessor['Entradas'].astype(int)
+            resumo_por_assessor['Saídas'] = resumo_por_assessor['Saídas'].astype(int)
+            resumo_por_assessor['Final'] = resumo_por_assessor['Clientes Iniciais'] + resumo_por_assessor['Entradas'] - resumo_por_assessor['Saídas']
 
-                # Remover duplicatas na Base Gamma
-                base_gamma = base_gamma.drop_duplicates(subset='Cliente')
+            # Adicionar linha de total consolidado
+            total_resumo = pd.DataFrame({
+                "Farmer": ["Total Consolidado"],
+                "Clientes Iniciais": [resumo_por_assessor["Clientes Iniciais"].sum()],
+                "Entradas": [resumo_por_assessor["Entradas"].sum()],
+                "Saídas": [resumo_por_assessor["Saídas"].sum()],
+                "Final": [resumo_por_assessor["Final"].sum()]
+            })
+            resumo_por_assessor = pd.concat([resumo_por_assessor, total_resumo], ignore_index=True)
 
-                # Interseção de clientes
-                clientes_base_gamma = set(base_gamma['Cliente'])
-                clientes_positivador_novo = set(positivador_novo['Cliente'])
-                clientes_inclusoes = set(inclusoes_novo['CODIGO DO CLIENTE'])
+            # Criar relatório analítico de entradas e saídas
+            analitico_entradas = entradas[['Código do Cliente', 'Farmer', 'Nome Assessor Destino']].rename(
+                columns={'Farmer': 'Assessor Origem', 'Nome Assessor Destino': 'Assessor Destino'}
+            ).assign(Status="Entrada")
+            analitico_saidas = saidas[['Código do Cliente', 'Farmer', 'Nome Assessor Origem']].rename(
+                columns={'Farmer': 'Assessor Destino', 'Nome Assessor Origem': 'Assessor Origem'}
+            ).assign(Status="Saída")
 
+            detalhes_clientes = pd.concat([analitico_entradas, analitico_saidas], ignore_index=True)
+            detalhes_clientes = detalhes_clientes.fillna("Não Consta")
 
-                base_gamma['Dt Saída'] = pd.to_datetime(base_gamma['Dt Saída'], errors='coerce')
-                # Corrigir a coluna 'Assessor' removendo as vírgulas de números
-                positivador_novo['Assessor'] = positivador_novo['Assessor'].astype(str).str.replace(',', '')
+            # Exibir Resumo e Gráficos
+            st.subheader("📋 Resumo Consolidado")
+            st.metric("Total de Clientes Inicial", resumo_por_assessor["Clientes Iniciais"].iloc[-1])
+            st.metric("Total de Entradas", resumo_por_assessor["Entradas"].iloc[-1])
+            st.metric("Total de Saídas", resumo_por_assessor["Saídas"].iloc[-1])
+            st.metric("Total Final de Clientes", resumo_por_assessor["Final"].iloc[-1])
 
-                # Interseções corretas entre os grupos
-                coincidentes = clientes_base_gamma.intersection(clientes_positivador_novo)
-                novos = clientes_positivador_novo - clientes_base_gamma
-                saidas = clientes_base_gamma - clientes_positivador_novo
-                coincidentes_inclusoes_novos = clientes_inclusoes.intersection(novos)
+            st.subheader("📋 Resumo por Assessor")
+            st.dataframe(resumo_por_assessor.rename(columns={"Farmer": "Assessor"}))
 
-                # Cálculo do relatório de movimentações
-                inicio_total = len(clientes_base_gamma)
-                entradas_total = len(novos)
-                saidas_total = len(saidas)
-                fim_total = inicio_total + entradas_total - saidas_total
-
-                dentro_positivador_inicio = len(coincidentes)
-                dentro_positivador_saidas = len(saidas.intersection(coincidentes))
-                dentro_positivador_fim = dentro_positivador_inicio - dentro_positivador_saidas
-
-                fora_positivador_inicio = inicio_total - dentro_positivador_inicio
-                fora_positivador_saidas = len(saidas.difference(coincidentes))
-                fora_positivador_entradas = len(novos)
-                fora_positivador_fim = fora_positivador_inicio + fora_positivador_entradas - fora_positivador_saidas
-
-                # Criar DataFrame para o Relatório de Movimentações
-                relatorio = pd.DataFrame({
-                    '': ['Total', 'Dentro Positivador', 'Fora Positivador'],
-                    'Início': [inicio_total, dentro_positivador_inicio, fora_positivador_inicio],
-                    'Entradas': [entradas_total, 0, fora_positivador_entradas],
-                    'Saídas': [saidas_total, dentro_positivador_saidas, fora_positivador_saidas],
-                    'Fim': [fim_total, dentro_positivador_fim, fora_positivador_fim]
-                })
-
-                # Calcular informações extras (Entradas, Coincidente Inclusões, Sem Farmer)
-                total_coincidentes_inclusoes_novos = len(coincidentes_inclusoes_novos)
-                sem_farmer = entradas_total - total_coincidentes_inclusoes_novos
-
-                # Criar DataFrame para as novas informações no topo
-                informacoes_extras = pd.DataFrame({
-                    '': ['Entradas', 'Coincidente Inclusões', 'Sem Farmer'],
-                    'Total': [entradas_total, total_coincidentes_inclusoes_novos, sem_farmer]
-                })
-
-                # --- Painel 1: Resumo e Movimentações ---
-                with st.expander("Painel 1: Base Gamma x Positivador (Entradas e saídas)", expanded=True):
-                    st.subheader("Resumo dos Totais")
-                    st.write(f"Total de clientes coincidentes (Positivador x Base Gamma): {len(coincidentes)}")
-                    st.write(f"Total de novos clientes: {entradas_total}")
-                    st.write(f"Total de clientes que saíram: {len(saidas)}")
-                    st.write(f"Total de inclusões: {len(clientes_inclusoes)}")
-                    st.write(f"Total Base Gamma: {inicio_total}")
-                    st.write(
-                        f"Total de clientes coincidentes entre Inclusões e Novos Clientes: {total_coincidentes_inclusoes_novos}")
-
-
-                    st.subheader("Novos Clientes:")
-                    st.dataframe(positivador_novo[positivador_novo['Cliente'].isin(novos)])
-
-                    st.subheader("Clientes que Saíram:")
-                    st.dataframe(base_gamma[base_gamma['Cliente'].isin(saidas)])
-
-                    st.subheader("Relatório de Movimentações")
-                    st.dataframe(relatorio)
-
-                    st.subheader("Informações Adicionais")
-                    st.dataframe(informacoes_extras)
-
-                # --- Painel 2: Coincidências ---
-                with st.expander("Painel 2: Coincidências", expanded=False):
-
-                    st.subheader("Coincidentes entre Inclusões e Novos Clientes:")
-                    st.dataframe(inclusoes_novo[inclusoes_novo['CODIGO DO CLIENTE'].isin(coincidentes_inclusoes_novos)])
-
-                    # Calcular diferença entre novos e coincidências
-                    diferenca_novos_coincidentes = novos - coincidentes_inclusoes_novos
-                    st.subheader("Clientes sem farmer:")
-                    st.dataframe(positivador_novo[positivador_novo['Cliente'].isin(diferenca_novos_coincidentes)])
-
-
-                # --- Painel 3: Outros Detalhes ---
-                with st.expander("Painel 3: Outros Detalhes", expanded=False):
-
-                    st.subheader("Detalhes - Inclusões:")
-                    st.dataframe(inclusoes_novo[inclusoes_novo['CODIGO DO CLIENTE'].isin(clientes_inclusoes)])
-
-                # Agrupar clientes por Classe e Farmer/Hunter
-                clientes_por_pessoa = base_gamma.groupby(['Classe', 'Farmer / Hunter']).size().reset_index(
-                    name='Total de Clientes')
-
-                # Somar todos os clientes por Classe
-                total_geral = clientes_por_pessoa['Total de Clientes'].sum()
-
-                # Adicionar uma linha de total geral
-                total_row = pd.DataFrame([['Total', '', total_geral]],
-                                         columns=['Classe', 'Farmer / Hunter', 'Total de Clientes'])
-
-                clientes_por_pessoa = pd.concat([clientes_por_pessoa, total_row], ignore_index=True)
-
-                # --- Painel 4: Tabela dinâmica (Clientes por Classe e Pessoa) ---
-                st.subheader("Painel 4: Clientes por Classe e Pessoa")
-
-                # Loop para criar expanders para cada classe
-                classes = clientes_por_pessoa['Classe'].unique()
-
-                for classe in classes:
-                    with st.expander(f"{classe}", expanded=False):
-                        # Filtrar clientes por classe específica
-                        clientes_classe = clientes_por_pessoa[clientes_por_pessoa['Classe'] == classe]
-
-                        # Calcular subtotal da classe
-                        subtotal = clientes_classe['Total de Clientes'].sum()
-
-                        # Exibir os dados da classe expandida
-                        st.dataframe(clientes_classe)
-
-                        # Exibir o subtotal da classe
-                        st.write(f"Subtotal para {classe}: {subtotal} clientes")
-
-
-                st.success("Comparação e relatório de movimentações gerados com sucesso!")
-
-
-
-        except Exception as e:
-
-            st.error(f"Ocorreu um erro durante a comparação: {type(e).__name__} - {str(e)}")
+            # Exportar Relatórios para Excel
+            with st.expander("⬇️ Exportar Relatórios"):
+                buffer = BytesIO()
+                with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
+                    resumo_por_assessor.to_excel(writer, index=False, sheet_name="Resumo por Assessor")
+                    detalhes_clientes.to_excel(writer, index=False, sheet_name="Detalhes Clientes")
+                buffer.seek(0)
+                st.download_button(
+                    label="Baixar Relatórios Consolidado",
+                    data=buffer,
+                    file_name="relatorios_transferencias.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                )
